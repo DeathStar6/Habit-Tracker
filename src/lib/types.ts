@@ -18,4 +18,12 @@ export interface UserStats {
   achievements: string[];
 }
 
-export type Theme = 'light' | 'dark';
+export type Theme = 'light' | 'dark' | 'cyberpunk' | 'nature';
+
+export interface Quest {
+  id: string;
+  title: string;
+  xpReward: number;
+  isComplete: boolean;
+  createdAt: string;
+}

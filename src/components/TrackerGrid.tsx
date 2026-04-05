@@ -110,20 +110,22 @@ export default function TrackerGrid() {
                 {weekDays.map((date) => {
                   const dateStr = format(date, "yyyy-MM-dd");
                   const isCompleted = records[dateStr]?.includes(habit.id);
-                  const isFuture = date > new Date();
+                  const isDifferentDay = dateStr !== format(new Date(), "yyyy-MM-dd");
 
                   return (
                     <div key={dateStr} className="flex justify-center">
                       <button
-                        disabled={isFuture}
+                        disabled={isDifferentDay}
                         onClick={() => toggleHabit(habit.id, dateStr)}
                         className={cn(
                           "w-10 h-10 rounded-xl flex items-center justify-center transition-all border-2",
-                          isFuture ? "opacity-30 cursor-not-allowed border-dashed border-border" :
-                          isCompleted ? "bg-primary border-primary text-white shadow-lg shadow-primary/30" : "bg-card border-border hover:border-primary/50"
+                          isDifferentDay ? "cursor-not-allowed" : "hover:border-primary/50",
+                          isCompleted ? "bg-primary border-primary text-white shadow-lg shadow-primary/30" : "bg-card border-border",
+                          isDifferentDay && !isCompleted ? "opacity-30 border-dashed" : "",
+                          isDifferentDay && isCompleted ? "opacity-60" : ""
                         )}
                       >
-                        {isCompleted && <CheckCircle2 size={24} className="fill-white text-primary" />}
+                        {isCompleted && <CheckCircle2 size={24} className={cn("fill-white text-primary", isDifferentDay ? "opacity-60" : "")} />}
                       </button>
                     </div>
                   );

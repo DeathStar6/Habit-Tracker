@@ -1,16 +1,20 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Habit, DailyRecord, Difficulty } from "../lib/types";
+import { Habit, DailyRecord, Difficulty, Quest, Theme } from "../lib/types";
 import { format, subDays, startOfWeek, addDays } from "date-fns";
 import confetti from "canvas-confetti";
+import { useSession } from "next-auth/react";
 
 interface HabitState {
   habits: Habit[];
   records: DailyRecord;
+  quests: Quest[];
   spentXp: number;
   unlockedAvatars: string[];
   activeAvatar: string;
+  unlockedThemes: string[];
+  activeTheme: Theme;
 }
 
 interface DerivedStats {
@@ -21,7 +25,7 @@ interface DerivedStats {
   longestStreak: number;
   achievements: string[];
   xpToNextLevel: number;
-  xpProgress: number; // 0 to 100
+  xpProgress: number;
 }
 
 interface HabitContextType extends HabitState, DerivedStats {
@@ -32,6 +36,10 @@ interface HabitContextType extends HabitState, DerivedStats {
   reorderHabits: (newOrderKeys: string[]) => void;
   purchaseItem: (cost: number, itemId: string) => void;
   equipAvatar: (itemId: string) => void;
+  purchaseTheme: (cost: number, themeId: string) => void;
+  equipTheme: (themeId: Theme) => void;
+  addQuest: (title: string, xpReward: number) => void;
+  completeQuest: (id: string) => void;
   resetWeek: () => void;
   toggleSound: () => void;
   soundEnabled: boolean;
@@ -40,9 +48,12 @@ interface HabitContextType extends HabitState, DerivedStats {
 const defaultState: HabitState = {
   habits: [],
   records: {},
+  quests: [],
   spentXp: 0,
   unlockedAvatars: ["👨‍🚀"],
   activeAvatar: "👨‍🚀",
+  unlockedThemes: ["light"],
+  activeTheme: "light",
 };
 
 const HabitContext = createContext<HabitContextType | undefined>(undefined);
@@ -57,13 +68,15 @@ const XP_MAP: Record<Difficulty, number> = {
 };
 
 export function HabitProvider({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
   const [state, setState] = useState<HabitState>(defaultState);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [dbHydrated, setDbHydrated] = useState(false);
 
   useEffect(() => {
     const data = localStorage.getItem(HABIT_STORAGE_KEY);
-    if (data) {
+    if (data && !isLoaded) {
       setState({ ...defaultState, ...JSON.parse(data) });
     }
     const soundData = localStorage.getItem(SOUND_STORAGE_KEY);
@@ -71,13 +84,61 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       setSoundEnabled(soundData === "true");
     }
     setIsLoaded(true);
-  }, []);
+  }, [isLoaded]);
 
+  // DB Sync Mount
+  useEffect(() => {
+    if (status === "authenticated" && !dbHydrated) {
+      fetch("/api/sync").then(res => res.json()).then(data => {
+        if (!data.error) {
+           const hasDbState = data.habits?.length > 0 || Object.keys(data.records || {}).length > 0 || data.quests?.length > 0;
+           const localData = localStorage.getItem(HABIT_STORAGE_KEY);
+           const parsedLocal = localData ? JSON.parse(localData) : null;
+           const hasLocalState = parsedLocal && (parsedLocal.habits?.length > 0 || Object.keys(parsedLocal.records || {}).length > 0);
+           
+           if (!hasDbState && hasLocalState) {
+             // Migrate local to DB
+             fetch("/api/sync", {
+               method: "POST",
+               body: JSON.stringify({ ...defaultState, ...parsedLocal })
+             });
+             setDbHydrated(true);
+           } else if (hasDbState) {
+             // DB takes precedence, hydrate UI
+             setState({
+               habits: data.habits,
+               records: data.records,
+               quests: data.quests || [],
+               spentXp: data.settings?.spentXp || 0,
+               unlockedAvatars: data.settings?.unlockedAvatars || ["👨‍🚀"],
+               activeAvatar: data.settings?.activeAvatar || "👨‍🚀",
+               unlockedThemes: data.settings?.unlockedThemes || ["light"],
+               activeTheme: data.settings?.activeTheme || "light",
+             });
+             setDbHydrated(true);
+           } else {
+             setDbHydrated(true);
+           }
+        }
+      });
+    }
+  }, [status, dbHydrated]);
+
+  // Change Watcher
   useEffect(() => {
     if (isLoaded) {
       localStorage.setItem(HABIT_STORAGE_KEY, JSON.stringify(state));
+      if (status === "authenticated" && dbHydrated) {
+        const timeout = setTimeout(() => {
+           fetch("/api/sync", {
+            method: "POST",
+            body: JSON.stringify(state)
+          }).catch(() => {});
+        }, 500);
+        return () => clearTimeout(timeout);
+      }
     }
-  }, [state, isLoaded]);
+  }, [state, isLoaded, status, dbHydrated]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -91,7 +152,6 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       let typeOsc: OscillatorType = "sine";
       let dur = 100;
       
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       const osc = audioCtx.createOscillator();
       const gainNode = audioCtx.createGain();
@@ -125,28 +185,27 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       osc.start();
       osc.stop(audioCtx.currentTime + dur / 1000);
     } catch (_) {
-      // ignore audio errors
     }
   };
 
-  // Derive stats dynamically
   const deriveStats = (): DerivedStats => {
     let xp = 0;
     let currentStreak = 0;
     let longestStreak = 0;
     const achievements = new Set<string>();
 
+    // Quests XP
+    (state.quests || []).forEach(q => {
+      if (q.isComplete) xp += q.xpReward;
+    });
+
     const sortedDates = Object.keys(state.records).sort();
-    
-    // Check if habit is completed on date
     const allHabitsIds = state.habits.map((h) => h.id);
     
-    // Calculate total XP
     sortedDates.forEach((date) => {
       const completedIds = state.records[date] || [];
       if (completedIds.length === 0) return;
       
-      // Calculate XP for habits
       completedIds.forEach((id) => {
         const habit = state.habits.find((h) => h.id === id);
         if (habit) {
@@ -154,26 +213,20 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
         }
       });
 
-      // Daily bonus?
       const completedActive = allHabitsIds.filter(id => completedIds.includes(id));
       if (state.habits.length > 0 && completedActive.length === state.habits.length) {
         xp += 10;
       }
     });
 
-    // We can also calculate weekly bonuses but it's complex to track historically cleanly.
-    // For simplicity, we just check if current week is completely done for the bonus.
-    
-    // Calculate Streaks
     const today = format(new Date(), "yyyy-MM-dd");
     let tempStreak = 0;
     
-    // Iterate from past to present to get longest and current
     const dateList: string[] = [];
     if (sortedDates.length > 0) {
       const firstDateStr = sortedDates[0];
       let curr = new Date(firstDateStr);
-      const end = addDays(new Date(), 1); // Go up to today
+      const end = addDays(new Date(), 1);
       while (curr <= end) {
         dateList.push(format(curr, "yyyy-MM-dd"));
         curr = addDays(curr, 1);
@@ -189,18 +242,15 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
         tempStreak++;
         longestStreak = Math.max(longestStreak, tempStreak);
         
-        // Track 7 days perfect week achievement within streak
         if (tempStreak === 7) achievements.add("Consistency King");
         if (tempStreak === 30) achievements.add("Grinder");
       } else {
         if (date < today) {
-           // broken streak
            tempStreak = 0;
         }
       }
     });
 
-    // if tempStreak applies to today or yesterday, it's the current streak
     const todayCompletedActive = allHabitsIds.filter(id => (state.records[today] || []).includes(id));
     const yesterdayCompletedActive = allHabitsIds.filter(id => (state.records[format(subDays(new Date(), 1), "yyyy-MM-dd")] || []).includes(id));
     
@@ -209,19 +259,17 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
 
     currentStreak = tempStreak;
     if (!todayAll && !yesterdayAll) {
-      currentStreak = 0; // broken
+      currentStreak = 0;
     }
     
     if (currentStreak >= 7) achievements.add("Perfect Week");
     
-    // check single habit achievement
     let anyHabitDone = false;
     for(const k of sortedDates) {
       if ((state.records[k] || []).length > 0) anyHabitDone = true;
     }
     if (anyHabitDone) achievements.add("First Step");
 
-    // Level
     let level = 1;
     let xpNeeded = 100 * level;
     let remainingXp = xp;
@@ -275,7 +323,6 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
         
       if (!dateRecords.includes(id)) {
          playSound("check");
-         // Check for all habits done
          const newCompleted = [...dateRecords, id];
          const allActive = prev.habits.map(h=>h.id);
          const completedActive = allActive.filter(hid => newCompleted.includes(hid));
@@ -298,7 +345,6 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetWeek = () => {
-    // Clear current week's M-Su dates
     const start = startOfWeek(new Date(), { weekStartsOn: 1 });
     const datesToClear = Array.from({ length: 7 }).map((_, i) => format(addDays(start, i), "yyyy-MM-dd"));
     
@@ -335,11 +381,43 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
+  const purchaseTheme = (cost: number, themeId: string) => {
+    setState(prev => ({
+      ...prev,
+      spentXp: (prev.spentXp || 0) + cost,
+      unlockedThemes: [...(prev.unlockedThemes || ["light"]), themeId]
+    }));
+    playSound("levelup");
+  };
+
+  const equipTheme = (themeId: Theme) => {
+    setState(prev => ({ ...prev, activeTheme: themeId }));
+  };
+
+  const addQuest = (title: string, xpReward: number) => {
+    const q: Quest = {
+      id: Math.random().toString(36).substring(2, 9),
+      title,
+      xpReward,
+      isComplete: false,
+      createdAt: format(new Date(), "yyyy-MM-dd"),
+    };
+    setState(prev => ({ ...prev, quests: [...(prev.quests || []), q] }));
+  };
+
+  const completeQuest = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      quests: (prev.quests || []).map(q => q.id === id ? { ...q, isComplete: true } : q)
+    }));
+    playSound("bonus");
+    confetti({ particleCount: 300, spread: 150, zIndex: 9999 });
+  };
+
   const toggleSound = () => setSoundEnabled(p => !p);
 
   const stats = deriveStats();
 
-  // Handle Level Up Animation (simple hack: ref keeping track of level)
   React.useEffect(() => {
     if (!isLoaded) return;
     const prevLv = sessionStorage.getItem("current-level");
@@ -353,8 +431,15 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       });
     }
     sessionStorage.setItem("current-level", stats.level.toString());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stats.level, isLoaded]);
+
+  // Sync theme to body class
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const existingClasses = document.body.className.split(' ').filter(c => !c.startsWith('theme-'));
+      document.body.className = [...existingClasses, `theme-${state.activeTheme}`].join(' ');
+    }
+  }, [state.activeTheme]);
 
   return (
     <HabitContext.Provider value={{
@@ -368,6 +453,10 @@ export function HabitProvider({ children }: { children: React.ReactNode }) {
       reorderHabits,
       purchaseItem,
       equipAvatar,
+      purchaseTheme,
+      equipTheme,
+      addQuest,
+      completeQuest,
       toggleSound,
       soundEnabled
     }}>

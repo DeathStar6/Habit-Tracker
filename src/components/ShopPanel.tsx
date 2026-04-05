@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useHabits } from "../context/HabitContext";
-import { Store, Coins, Lock } from "lucide-react";
+import { Store, Coins, Lock, Palette } from "lucide-react";
 import { cn } from "../lib/utils";
+import { Theme } from "../lib/types";
 
 const SHOP_ITEMS = [
   { id: "👨‍🚀", name: "Astronaut", cost: 0 },
@@ -15,26 +17,43 @@ const SHOP_ITEMS = [
   { id: "🐉", name: "Dragon", cost: 1000 },
 ];
 
+const THEME_ITEMS: { id: Theme, name: string, cost: number, color: string }[] = [
+  { id: "light", name: "Light", cost: 0, color: "bg-gray-100" },
+  { id: "dark", name: "Dark", cost: 0, color: "bg-zinc-900" },
+  { id: "nature", name: "Nature", cost: 300, color: "bg-green-700" },
+  { id: "cyberpunk", name: "Cyberpunk", cost: 500, color: "bg-purple-600" },
+];
+
 export default function ShopPanel() {
-  const { coins, unlockedAvatars, activeAvatar, purchaseItem, equipAvatar } = useHabits();
+  const { 
+    coins, 
+    unlockedAvatars, activeAvatar, purchaseItem, equipAvatar,
+    unlockedThemes, activeTheme, purchaseTheme, equipTheme 
+  } = useHabits();
+
+  const [tab, setTab] = useState<"avatars" | "themes">("avatars");
 
   const handleAction = (item: typeof SHOP_ITEMS[0]) => {
     if (unlockedAvatars?.includes(item.id)) {
-      if (activeAvatar !== item.id) {
-        equipAvatar(item.id);
-      }
+      if (activeAvatar !== item.id) equipAvatar(item.id);
     } else {
-      if (coins >= item.cost) {
-        purchaseItem(item.cost, item.id);
-      }
+      if (coins >= item.cost) purchaseItem(item.cost, item.id);
+    }
+  };
+
+  const handleThemeAction = (item: typeof THEME_ITEMS[0]) => {
+    if (unlockedThemes?.includes(item.id)) {
+      if (activeTheme !== item.id) equipTheme(item.id);
+    } else {
+      if (coins >= item.cost) purchaseTheme(item.cost, item.id);
     }
   };
 
   return (
-    <div className="bg-card rounded-2xl p-6 shadow-sm border flex flex-col gap-4 mt-6">
-      <div className="flex items-center justify-between">
+    <div className="bg-card rounded-3xl p-6 shadow-sm border flex flex-col gap-4 mt-6">
+      <div className="flex items-center justify-between mb-2">
         <h2 className="text-xl font-bold flex items-center gap-2">
-          <Store className="text-primary" /> Avatar Shop
+          <Store className="text-primary" /> Shop
         </h2>
         <div className="flex items-center gap-1 font-bold text-yellow-500 bg-yellow-500/10 px-3 py-1 rounded-full text-sm">
           <Coins size={16} />
@@ -42,48 +61,112 @@ export default function ShopPanel() {
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
-        {SHOP_ITEMS.map((item) => {
-          const isUnlocked = unlockedAvatars?.includes(item.id);
-          const isEquipped = activeAvatar === item.id;
-          const canAfford = coins >= item.cost;
-
-          return (
-            <button
-              key={item.id}
-              onClick={() => handleAction(item)}
-              disabled={!isUnlocked && !canAfford}
-              className={cn(
-                "relative flex flex-col items-center p-3 rounded-xl border-2 transition-all overflow-hidden",
-                isEquipped ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 bg-secondary/30",
-                !isUnlocked && !canAfford && "opacity-50 cursor-not-allowed hover:border-border"
-              )}
-            >
-              <div className="text-3xl mb-1">{item.id}</div>
-              
-              {!isUnlocked ? (
-                <div className="flex items-center gap-1 text-[10px] font-bold text-yellow-600 dark:text-yellow-500">
-                  <Coins size={10} /> {item.cost}
-                </div>
-              ) : isEquipped ? (
-                <div className="text-[10px] uppercase font-bold text-primary flex items-center gap-1">
-                  Active
-                </div>
-              ) : (
-                <div className="text-[10px] uppercase font-bold text-muted-foreground">
-                  Equip
-                </div>
-              )}
-              
-              {!isUnlocked && !canAfford && (
-                <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
-                  <Lock size={24} className="text-muted-foreground drop-shadow-md" />
-                </div>
-              )}
-            </button>
-          );
-        })}
+      <div className="flex gap-2 p-1 bg-secondary/50 rounded-xl">
+        <button 
+          onClick={() => setTab("avatars")}
+          className={cn("flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors", tab === "avatars" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground")}
+        >
+          Avatars
+        </button>
+        <button 
+          onClick={() => setTab("themes")}
+          className={cn("flex-1 py-1.5 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-1", tab === "themes" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground")}
+        >
+          <Palette size={14} /> Themes
+        </button>
       </div>
+
+      {tab === "avatars" && (
+        <div className="grid grid-cols-4 gap-3">
+          {SHOP_ITEMS.map((item) => {
+            const isUnlocked = unlockedAvatars?.includes(item.id);
+            const isEquipped = activeAvatar === item.id;
+            const canAfford = coins >= item.cost;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleAction(item)}
+                disabled={!isUnlocked && !canAfford}
+                className={cn(
+                  "relative flex flex-col items-center p-3 rounded-xl border-2 transition-all overflow-hidden",
+                  isEquipped ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 bg-secondary/30",
+                  !isUnlocked && !canAfford && "opacity-50 cursor-not-allowed hover:border-border"
+                )}
+              >
+                <div className="text-3xl mb-1">{item.id}</div>
+                
+                {!isUnlocked ? (
+                  <div className="flex items-center gap-1 text-[10px] font-bold text-yellow-600 dark:text-yellow-500">
+                    <Coins size={10} /> {item.cost}
+                  </div>
+                ) : isEquipped ? (
+                  <div className="text-[10px] uppercase font-bold text-primary flex items-center gap-1">
+                    Active
+                  </div>
+                ) : (
+                  <div className="text-[10px] uppercase font-bold text-muted-foreground">
+                    Equip
+                  </div>
+                )}
+                
+                {!isUnlocked && !canAfford && (
+                  <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
+                    <Lock size={24} className="text-muted-foreground drop-shadow-md" />
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {tab === "themes" && (
+        <div className="grid grid-cols-2 gap-3">
+          {THEME_ITEMS.map((item) => {
+            const isUnlocked = unlockedThemes?.includes(item.id);
+            const isEquipped = activeTheme === item.id;
+            const canAfford = coins >= item.cost;
+
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleThemeAction(item)}
+                disabled={!isUnlocked && !canAfford}
+                className={cn(
+                  "relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all overflow-hidden",
+                  isEquipped ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 bg-secondary/30",
+                  !isUnlocked && !canAfford && "opacity-50 cursor-not-allowed hover:border-border"
+                )}
+              >
+                <div className={cn("w-10 h-10 rounded-full mb-2 shadow-sm border", item.color)} />
+                <span className="font-bold text-sm mb-1">{item.name}</span>
+                
+                {!isUnlocked ? (
+                  <div className="flex items-center gap-1 text-xs font-bold text-yellow-600 dark:text-yellow-500">
+                    <Coins size={12} /> {item.cost}
+                  </div>
+                ) : isEquipped ? (
+                  <div className="text-[10px] uppercase font-bold text-primary flex items-center gap-1">
+                    Active
+                  </div>
+                ) : (
+                  <div className="text-[10px] uppercase font-bold text-muted-foreground">
+                    Equip
+                  </div>
+                )}
+                
+                {!isUnlocked && !canAfford && (
+                  <div className="absolute inset-0 bg-background/50 flex items-center justify-center">
+                    <Lock size={24} className="text-muted-foreground drop-shadow-md" />
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
     </div>
   );
 }

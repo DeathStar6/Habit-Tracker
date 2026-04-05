@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @layer base {
-  :root {
+  :root, .theme-light {
     --background: hsl(0 0% 98%);
     --foreground: hsl(222.2 84% 4.9%);
     --card: hsl(0 0% 100%);
@@ -17,7 +17,7 @@
     --border: hsl(214.3 31.8% 91.4%);
   }
 
-  .dark {
+  .theme-dark {
     --background: hsl(222.2 84% 4.9%);
     --foreground: hsl(210 40% 98%);
     --card: hsl(222.2 84% 8%);
@@ -33,13 +33,58 @@
     --border: hsl(217.2 32.6% 17.5%);
   }
 
+  .theme-cyberpunk {
+    --background: hsl(280 40% 7%);
+    --foreground: hsl(300 100% 95%);
+    --card: hsl(280 40% 12%);
+    --card-foreground: hsl(300 100% 95%);
+    --primary: hsl(320 100% 60%);
+    --primary-foreground: hsl(0 0% 100%);
+    --secondary: hsl(260 80% 25%);
+    --secondary-foreground: hsl(0 0% 100%);
+    --muted: hsl(280 30% 20%);
+    --muted-foreground: hsl(300 40% 70%);
+    --destructive: hsl(0 90% 60%);
+    --destructive-foreground: hsl(0 0% 100%);
+    --border: hsl(320 80% 40%);
+  }
+
+  .theme-nature {
+    --background: hsl(150 20% 95%);
+    --foreground: hsl(150 40% 15%);
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(150 40% 15%);
+    --primary: hsl(140 50% 45%);
+    --primary-foreground: hsl(0 0% 100%);
+    --secondary: hsl(100 40% 85%);
+    --secondary-foreground: hsl(150 60% 20%);
+    --muted: hsl(130 30% 90%);
+    --muted-foreground: hsl(150 20% 40%);
+    --destructive: hsl(10 70% 50%);
+    --destructive-foreground: hsl(0 0% 100%);
+    --border: hsl(140 40% 80%);
+  }
+
   * {
     border-color: var(--border);
   }
   body {
     background-color: var(--background);
     color: var(--foreground);
-    transition: background-color 0.3s, color 0.3s;
+    transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+  body.theme-cyberpunk {
+    background-image: url('/cyberpunk-bg.png');
+  }
+  body.theme-nature {
+    background-image: url('/nature-bg.png');
+  }
+  body.theme-light, body.theme-dark {
+    background-image: none;
   }
 }
 
