@@ -7,6 +7,7 @@ import ShopPanel from "../components/ShopPanel";
 import AIAnalysisPanel from "../components/AIAnalysisPanel";
 import LoginScreen from "../components/LoginScreen";
 import QuestsPanel from "../components/QuestsPanel";
+import ProfilePanel from "../components/ProfilePanel";
 import { auth } from "../auth";
 
 const quotes = [
@@ -40,6 +41,7 @@ export default async function Home() {
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-1 flex flex-col gap-6">
+            <ProfilePanel />
             <StatsPanel />
             <AchievementPanel />
             <AIAnalysisPanel />
